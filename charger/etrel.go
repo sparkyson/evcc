@@ -29,6 +29,8 @@ import (
 	"github.com/volkszaehler/mbmd/encoding"
 )
 
+// https://github.com/RustyDust/sonnen-charger/blob/main/Etrel%20INCH%20SmartHome%20Modbus%20TCPRegisters.xlsx
+
 const (
 	etrelRegChargeStatus  = 0
 	etrelRegPower         = 26
@@ -47,9 +49,7 @@ const (
 
 var etrelRegCurrents = []uint16{14, 16, 18}
 
-// https://github.com/RustyDust/sonnen-charger/blob/main/Etrel%20INCH%20SmartHome%20Modbus%20TCPRegisters.xlsx
-
-// Etrel is an api.ChargeController implementation for Etrel/Sonnen wallboxes
+// Etrel is an api.Charger implementation for Etrel/Sonnen wallboxes
 type Etrel struct {
 	log     *util.Logger
 	conn    *modbus.Connection

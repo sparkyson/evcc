@@ -46,7 +46,7 @@ const (
 
 var vestelRegCurrents = []uint16{1008, 1010, 1012}
 
-// Vestel is an api.ChargeController implementation for Vestel/Hymes wallboxes with Ethernet (SW modells).
+// Vestel is an api.Charger implementation for Vestel/Hymes wallboxes with Ethernet (SW modells).
 // It uses Modbus TCP to communicate with the wallbox at modbus client id 255.
 type Vestel struct {
 	log     *util.Logger
