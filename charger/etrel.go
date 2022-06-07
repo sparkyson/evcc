@@ -38,12 +38,11 @@ const (
 	etrelRegChargeTime    = 32
 	etrelRegSerial        = 990
 	etrelRegModel         = 1000
-	etrelRegBrand         = 190
 	etrelRegHWVersion     = 1010
 	etrelRegSWVersion     = 1015
 
+	// etrelRegPause      = 2
 	etrelRegStop       = 1
-	etrelRegPause      = 2
 	etrelRegMaxCurrent = 8
 )
 
