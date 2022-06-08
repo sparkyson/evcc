@@ -32,18 +32,22 @@ import (
 // https://github.com/RustyDust/sonnen-charger/blob/main/Etrel%20INCH%20SmartHome%20Modbus%20TCPRegisters.xlsx
 
 const (
-	etrelRegChargeStatus  = 0
-	etrelRegPower         = 26
-	etrelRegSessionEnergy = 30
-	etrelRegChargeTime    = 32
-	etrelRegSerial        = 990
-	etrelRegModel         = 1000
-	etrelRegHWVersion     = 1010
-	etrelRegSWVersion     = 1015
+	etrelRegChargeStatus     = 0
+	etrelRegMaxPhaseCurrent  = 2
+	etrelRegTargetCurrent    = 4 // power mgmt or modbus
+	etrelRegPower            = 26
+	etrelRegSessionEnergy    = 30
+	etrelRegChargeTime       = 32
+	etrelRegSerial           = 990
+	etrelRegModel            = 1000
+	etrelRegHWVersion        = 1010
+	etrelRegSWVersion        = 1015
+	etrelRegCustomMaxCurrent = 1028
 
-	// etrelRegPause      = 2
 	etrelRegStop       = 1
+	etrelRegPause      = 2
 	etrelRegMaxCurrent = 8
+	etrelRegMaxPower   = 11
 )
 
 var etrelRegCurrents = []uint16{14, 16, 18}
@@ -62,7 +66,7 @@ func init() {
 // NewEtrelFromConfig creates a Etrel charger from generic config
 func NewEtrelFromConfig(other map[string]interface{}) (api.Charger, error) {
 	cc := modbus.TcpSettings{
-		ID: 255,
+		ID: 1,
 	}
 
 	if err := util.DecodeOther(other, &cc); err != nil {
@@ -102,6 +106,20 @@ func (wb *Etrel) Status() (api.ChargeStatus, error) {
 		return api.StatusNone, err
 	}
 
+	wb.log.TRACE.Printf("etrelRegChargeStatus: %v", binary.BigEndian.Uint16(b))
+
+	// 0 Unknown
+	// 1 SocketAvailable
+	// 2 WaitingForVehicleToBeConnected
+	// 3 WaitingForVehicleToStart
+	// 4 Charging
+	// 5 ChargingPausedByEv
+	// 6 ChargingPausedByEvse
+	// 7 ChargingEnded
+	// 8 ChargingFault
+	// 9 UnpausingCharging
+	// 10 Unavailable
+
 	switch u := binary.BigEndian.Uint16(b); u {
 	case 1, 2:
 		return api.StatusA, nil
@@ -116,10 +134,36 @@ func (wb *Etrel) Status() (api.ChargeStatus, error) {
 
 // Enabled implements the api.Charger interface
 func (wb *Etrel) Enabled() (bool, error) {
+	if b, err := wb.conn.ReadHoldingRegisters(etrelRegMaxPower, 2); err != nil {
+		return false, err
+	} else {
+		wb.log.TRACE.Printf("etrelRegMaxPower: %v", encoding.Float32(b))
+	}
+
+	if b, err := wb.conn.ReadInputRegisters(etrelRegMaxPhaseCurrent, 2); err != nil {
+		return false, err
+	} else {
+		wb.log.TRACE.Printf("etrelRegMaxPhaseCurrent: %v", encoding.Float32(b))
+	}
+
+	if b, err := wb.conn.ReadInputRegisters(etrelRegTargetCurrent, 2); err != nil {
+		return false, err
+	} else {
+		wb.log.TRACE.Printf("etrelRegTargetCurrent: %v", encoding.Float32(b))
+	}
+
+	if b, err := wb.conn.ReadInputRegisters(etrelRegCustomMaxCurrent, 2); err != nil {
+		return false, err
+	} else {
+		wb.log.TRACE.Printf("etrelRegCustomMaxCurrent: %v", encoding.Float32(b))
+	}
+
 	b, err := wb.conn.ReadHoldingRegisters(etrelRegMaxCurrent, 2)
 	if err != nil {
 		return false, err
 	}
+
+	wb.log.TRACE.Printf("etrelRegMaxCurrent: %v", encoding.Float32(b))
 
 	return encoding.Float32(b) > 0, nil
 }
@@ -127,10 +171,27 @@ func (wb *Etrel) Enabled() (bool, error) {
 // Enable implements the api.Charger interface
 func (wb *Etrel) Enable(enable bool) error {
 	if enable {
-		return wb.setCurrent(wb.current)
+		// return wb.setCurrent(wb.current)
+
+		// _, err := wb.conn.WriteMultipleRegisters(1004, 1, b)
+
+		// b := make([]byte, 2)
+		// binary.BigEndian.PutUint16(b, 1)
+
+		// _, err := wb.conn.WriteMultipleRegisters(etrelRegStop, 1, b)
+
+		// if err == nil {
+		// _, err := wb.conn.WriteMultipleRegisters(etrelRegPause, 1, b)
+		// }
+
+		b := make([]byte, 4)
+		binary.BigEndian.PutUint32(b, math.Float32bits(3))
+		_, err := wb.conn.WriteMultipleRegisters(etrelRegMaxPower, 2, b)
+
+		return err
 	}
 
-	b := make([]byte, 1)
+	b := make([]byte, 2)
 	binary.BigEndian.PutUint16(b, 1)
 
 	_, err := wb.conn.WriteMultipleRegisters(etrelRegStop, 1, b)
@@ -139,9 +200,9 @@ func (wb *Etrel) Enable(enable bool) error {
 
 func (wb *Etrel) setCurrent(current float32) error {
 	b := make([]byte, 4)
-	binary.BigEndian.PutUint32(b, math.Float32bits(wb.current))
+	binary.BigEndian.PutUint32(b, math.Float32bits(current))
 
-	_, err := wb.conn.WriteMultipleRegisters(etrelRegMaxCurrent, 1, b)
+	_, err := wb.conn.WriteMultipleRegisters(etrelRegMaxCurrent, 2, b)
 	return err
 }
 
@@ -233,20 +294,20 @@ func (wb *Etrel) Currents() (float64, float64, float64, error) {
 	return currents[0], currents[1], currents[2], nil
 }
 
-var _ api.Diagnosis = (*Etrel)(nil)
+// var _ api.Diagnosis = (*Etrel)(nil)
 
-// Diagnose implements the api.Diagnosis interface
-func (wb *Etrel) Diagnose() {
-	if b, err := wb.conn.ReadInputRegisters(etrelRegModel, 10); err == nil {
-		fmt.Printf("Model:\t%s\n", b)
-	}
-	if b, err := wb.conn.ReadInputRegisters(etrelRegSerial, 10); err == nil {
-		fmt.Printf("Serial:\t%s\n", b)
-	}
-	if b, err := wb.conn.ReadInputRegisters(etrelRegHWVersion, 5); err == nil {
-		fmt.Printf("Hardware:\t%s\n", b)
-	}
-	if b, err := wb.conn.ReadInputRegisters(etrelRegSWVersion, 5); err == nil {
-		fmt.Printf("Software:\t%s\n", b)
-	}
-}
+// // Diagnose implements the api.Diagnosis interface
+// func (wb *Etrel) Diagnose() {
+// 	if b, err := wb.conn.ReadInputRegisters(etrelRegModel, 10); err == nil {
+// 		fmt.Printf("Model:\t%s\n", b)
+// 	}
+// 	if b, err := wb.conn.ReadInputRegisters(etrelRegSerial, 10); err == nil {
+// 		fmt.Printf("Serial:\t%s\n", b)
+// 	}
+// 	if b, err := wb.conn.ReadInputRegisters(etrelRegHWVersion, 5); err == nil {
+// 		fmt.Printf("Hardware:\t%s\n", b)
+// 	}
+// 	if b, err := wb.conn.ReadInputRegisters(etrelRegSWVersion, 5); err == nil {
+// 		fmt.Printf("Software:\t%s\n", b)
+// 	}
+// }
