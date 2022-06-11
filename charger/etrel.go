@@ -173,20 +173,22 @@ func (wb *Etrel) Enable(enable bool) error {
 	if enable {
 		// return wb.setCurrent(wb.current)
 
-		// _, err := wb.conn.WriteMultipleRegisters(1004, 1, b)
+		fmt.Println("enable")
 
-		// b := make([]byte, 2)
-		// binary.BigEndian.PutUint16(b, 1)
+		b := make([]byte, 2)
+		binary.BigEndian.PutUint16(b, 0)
 
-		// _, err := wb.conn.WriteMultipleRegisters(etrelRegStop, 1, b)
+		_, err := wb.conn.WriteMultipleRegisters(etrelRegStop, 1, b)
 
-		// if err == nil {
-		// _, err := wb.conn.WriteMultipleRegisters(etrelRegPause, 1, b)
-		// }
+		if err == nil {
+			_, err = wb.conn.WriteMultipleRegisters(etrelRegPause, 1, b)
+		}
 
-		b := make([]byte, 4)
-		binary.BigEndian.PutUint32(b, math.Float32bits(3))
-		_, err := wb.conn.WriteMultipleRegisters(etrelRegMaxPower, 2, b)
+		if err == nil {
+			b := make([]byte, 4)
+			binary.BigEndian.PutUint32(b, math.Float32bits(3))
+			_, err = wb.conn.WriteMultipleRegisters(etrelRegMaxPower, 2, b)
+		}
 
 		return err
 	}
